@@ -1,0 +1,385 @@
+---
+title: "Capstone - 2021 Data"
+author: "Magdalena Glotzer"
+date: "2024-09-17"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# R Markdown Document for My Capstone on 2021 Divvy Data
+
+## Context:
+
+Cyclistic’s finance analysts have concluded that annual members are much
+more profitable than casual riders. The Director of Marketing believes
+there is a solid opportunity to convert casual riders into members. The
+Goal is to design marketing strategies aimed at converting casual riders
+into annual members.
+
+## Key Task:
+
+Identify how annual members and casual riders differ in their use of the
+bike-share program
+
+## Summary of Analysis:
+
+Analyzed member versus casual rider data for number of rides by time of
+day, number of rides by day of week, number of rides per month, average
+ride duration (in minutes) by day of week, average ride duration (in
+minutes) by month.
+
+## Code
+
+### Load the necessary libraries
+
+```{r}
+library(tidyverse)  #helps wrangle data
+# Use the conflicted package to manage conflicts
+library(conflicted)
+
+# Set dplyr::filter and dplyr::lag as the default choices
+conflict_prefer("filter", "dplyr")
+conflict_prefer("lag", "dplyr")
+```
+
+### Set Working Diretory
+
+```{r}
+setwd("~/Desktop/capstone/Divvy_Data_2021")
+```
+
+
+### Step 1: Collect Data
+
+Upload Divvy datasets (csv files).
+
+On Kaggle: 2021 data can be found here: /kaggle/input/cyclistic-case-study-google-certificate
+
+Downloaded the data to my drive from here:
+Pulled from [here](https://divvy-tripdata.s3.amazonaws.com/index.html)
+
+License: [here](https://divvybikes.com/data-license-agreement)
+
+```{r}
+jan <- read_csv("202101-divvy-tripdata.csv")
+feb <- read_csv("202102-divvy-tripdata.csv")
+mar <- read_csv("202103-divvy-tripdata.csv")
+apr <- read_csv("202104-divvy-tripdata.csv")
+may <- read_csv("202105-divvy-tripdata.csv")
+jun <- read_csv("202106-divvy-tripdata.csv")
+jul <- read_csv("202107-divvy-tripdata.csv")
+aug <- read_csv("202108-divvy-tripdata.csv")
+sep <- read_csv("202109-divvy-tripdata.csv")
+oct <- read_csv("202110-divvy-tripdata.csv")
+nov <- read_csv("202111-divvy-tripdata.csv")
+dec <- read_csv("202112-divvy-tripdata.csv")
+```
+
+Check the structure of the files using spec()
+
+```{r}
+spec(jan)
+spec(feb)
+spec(mar)
+spec(apr)
+spec(may)
+spec(jun)
+spec(jul)
+spec(aug)
+spec(sep)
+spec(oct)
+spec(nov)
+spec(dec)
+```
+
+### Step 2: Combine Datasets
+
+```{r}
+all_trips <- rbind(jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec)
+```
+
+### Step 3: Clean up and add data to prepare for analysis
+
+Inspect the new table that has been created -- the column names, the first few lines of data, the types of data in each column, and a statistical summary of numeric data.
+```{r}
+colnames(all_trips)
+head(all_trips)
+str(all_trips)
+summary(all_trips)
+```
+
+Add columns that list the date, hour (convert to numeric), day, month (convert to numeric), and year of each ride. Also create a column that specifies if a day is a weekday or weekend. Set levels for the week days so that they will graph in the appropriate order. Going to change the member-casual column name to usertype, due to personal preference.
+
+```{r}
+all_trips$date <- as.Date(all_trips$started_at) #The default format is yyyy-mm-dd
+all_trips$month <- format(as.Date(all_trips$date), "%m")
+all_trips$month <- as.numeric(all_trips$month) #Conversion
+all_trips$hour <- format(as.POSIXct(all_trips$started_at), format = "%H")
+all_trips$hour <- as.numeric(all_trips$hour) #Conversion
+all_trips$day <- format(as.Date(all_trips$date), "%d")
+all_trips$year <- format(as.Date(all_trips$date), "%Y")
+all_trips$day_of_week <- format(as.Date(all_trips$date), "%A")
+all_trips$day_type <- ifelse(all_trips$day %in% c("Sat", "Sun"), "weekend", "weekday")
+levels(all_trips$day) <- c("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+
+all_trips <- rename(all_trips, usertype = member_casual)
+```
+
+Add a column for "ride_length" calculation. Convert it to a numeric and change calculation from seconds to minutes.
+
+```{r}
+# Add a "ride_length" calculation to all_trips (in minutes)
+all_trips$ride_length <- difftime(all_trips$ended_at,all_trips$started_at)
+
+# Convert "ride_length" from Factor to numeric so we can run calculations on the data
+all_trips$ride_length <- as.numeric(as.character(all_trips$ride_length))
+
+#Convert ride_length to minutes for easier calculation
+all_trips$ride_length <- (all_trips$ride_length / 60)
+
+summary(all_trips$ride_length)
+```
+
+Inspectin the ride_length column, there are some trip lengths that are negative and some that are multiple days long. Delete any rides under 30 seconds long and over 6 hours long.
+
+```{r}
+all_trips_clean <- all_trips[!(all_trips$ride_length < .5 | all_trips$ride_length > 360),]
+```
+
+Remove the data where the start or end station name is NA
+
+```{r}
+all_trips_clean <- all_trips_clean %>% drop_na(start_station_name) %>% drop_na(end_station_name)
+```
+
+Create a csv file with the cleaned up data for future use
+
+```{r}
+write_csv(all_trips_clean, "full-2021-divvydata.csv")
+```
+
+###Step 4: Conduct Descriptive Analysis
+
+```{r}
+summary(all_trips_clean$ride_length)
+```
+
+Compare the ride length data for members versus casual riders
+
+```{r}
+paste('Mean ride length')
+aggregate(all_trips_clean$ride_length ~ all_trips_clean$usertype, FUN = mean)
+paste("Median ride length")
+aggregate(all_trips_clean$ride_length ~ all_trips_clean$usertype, FUN = median)
+paste("Max ride length")
+aggregate(all_trips_clean$ride_length ~ all_trips_clean$usertype, FUN = max)
+paste("Min ride length")
+aggregate(all_trips_clean$ride_length ~ all_trips_clean$usertype, FUN = min)
+```
+
+Calculate how many rides were taken total, and how many were taken by members versus casual riders.
+
+```{r}
+all_trips_clean %>%
+summarise(number_of_rides = n())
+
+all_trips_clean %>%
+group_by(usertype)%>%
+summarise(number_of_rides = n())%>%
+ggplot(aes(x=usertype, y = number_of_rides, fill = usertype))+
+geom_col(position = "dodge") + geom_text(aes(label = number_of_rides)) + 
+labs(caption = "4,545,092 as total number of rides ")
+```
+
+Number of rides by bike type (with detail of casual and member counts)
+
+```{r}
+all_trips_clean %>%
+group_by(usertype, rideable_type)%>%
+summarise(number_of_rides = n())%>%
+ggplot(aes(x=rideable_type, y = number_of_rides, fill = usertype))+
+geom_col(position="stack")
+```
+
+Calculate average ride time for all riders. Visualize by usertype
+
+```{r}
+all_trips_clean %>%
+summarise(average_duration = mean(ride_length))
+
+all_trips_clean %>%
+group_by(usertype)%>%
+summarise(average_duration = mean(ride_length))%>%
+ggplot(aes(x=usertype, y = average_duration, fill = usertype))+
+geom_col(position = "dodge")+
+geom_label(aes(x = usertype, label=average_duration)) + 
+labs(caption = "Average ride time overall is 19.14989 minutes")
+```
+
+Create dataframe with average ride time per day of week for members vs casual users. This doesn't sort the data correctly, but it's a good starting point. 
+
+```{r}
+aggregate(all_trips_clean$ride_length ~ all_trips_clean$usertype + 
+          all_trips_clean$day_of_week, FUN = mean)
+```
+
+Create a dataframe that calculates 1. average ride time and 2. number of rides, per day of week for members and casual users. This dataframe will be sorted and presented Sunday to Saturday.
+```{r}
+all_trips_clean %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(usertype, weekday) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = mean(ride_length)) %>%
+  arrange(weekday, usertype)
+```
+
+Create a dataframe that calculates 1. average ridetime and 2. number of rides, per month for members and casual users. This dataframe will be sorted and printed January through December.
+```{r}
+all_trips_clean %>% 
+  mutate(month = month(started_at, label = TRUE)) %>%
+  group_by(usertype, month) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = mean(ride_length)) %>%
+  arrange(month, usertype)
+```
+
+Create a visualization showing average number of rides per day of the week. Separate by usertype.
+```{r}
+all_trips_clean %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(usertype, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(usertype, weekday)  %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = usertype)) +
+  facet_wrap(~usertype) +
+  geom_col(position = "dodge")
+```
+
+Create a visualization showing average ride duration per day of the week. Separate by usertype.
+```{r}
+all_trips_clean %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(usertype, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(usertype, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = usertype)) + 
+  facet_wrap(~usertype)+
+  geom_col(position = "dodge")
+```
+
+Create a visualization showing number of ride by month. Note that June data is incomplete as the first datapoint is from 2013-06-27.
+```{r}
+all_trips_clean %>% 
+  mutate(month = month(started_at, label = TRUE)) %>% 
+  group_by(usertype, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(usertype, month)  %>% 
+  ggplot(aes(x = month, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge")
+```
+
+Create a visualization showing average ride duration by month. Note that June data is incomplete as the first datapoint is from 2013-06-27. 
+```{r}
+all_trips_clean %>% 
+  mutate(month = month(started_at, label = TRUE)) %>% 
+  group_by(usertype, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(usertype, month)  %>% 
+  ggplot(aes(x = month, y = average_duration, fill = usertype)) +
+  geom_col(position = "dodge")
+```
+
+Create a visualization that shows the number of rides taken over the course of the day.
+
+```{r}
+all_trips_clean %>% 
+  mutate(time_of_day = as.numeric(hour)) %>% 
+  group_by(usertype, time_of_day) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(usertype, time_of_day)  %>% 
+  ggplot() +
+  geom_line(aes(x = time_of_day, y = number_of_rides, color = usertype))
+```
+  
+Create a visualization that shows the duration of rides taken over the course of the day.
+```{r}
+all_trips_clean %>% 
+  mutate(time_of_day = as.numeric(hour)) %>% 
+  group_by(usertype, time_of_day) %>% 
+  summarise(average_duration = mean(ride_length)) %>% 
+  arrange(usertype, time_of_day)  %>% 
+  ggplot() +
+  geom_line(aes(x = time_of_day, y = average_duration, color = usertype))
+```
+
+Looking at start and end points: Given the question we are trying to solve for this capstone, it would be useful to know which stations are most popular for casual users versus members. 
+
+Most popular start station for members:
+```{r}
+all_trips_clean %>%
+group_by(usertype = "member", start_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+group_by(usertype) %>%
+slice(1:5)
+```
+
+Most popular start station for casual users:
+```{r}
+all_trips_clean %>%
+group_by(usertype = "casual", start_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+group_by(usertype) %>%
+slice(1:5)
+```
+
+Most popular end station for members:
+```{r}
+all_trips_clean %>%
+group_by(usertype = "member", end_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+group_by(usertype) %>%
+slice(1:5)
+```
+
+Most popular end station for casual users:
+```{r}
+all_trips_clean %>%
+group_by(usertype = "casual", end_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+group_by(usertype) %>%
+slice(1:5)
+```
+
+Most popular start station overall:
+```{r}
+all_trips_clean %>%
+group_by(start_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+slice(1:5)
+```
+
+Most popular end station overall:
+```{r}
+all_trips_clean %>%
+group_by(end_station_name) %>% 
+summarise(number_of_rides = n()) %>% 
+arrange(desc(number_of_rides)) %>%
+slice(1:5)
+```
+
+The data above shows that the most popular start and end stations for casual riders are at tourist destinations: Navy Pier (Streeter Dr & Grand Ave), Millenium Park, an intersection by Water Tower Place and the Drake Hotel (Michigan Ave & Oak St), Theatre on the Lake, and the Shedd Aquarium.
